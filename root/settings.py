@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     # 3rd parties
     'rest_framework',
     'import_export',
+    'drf_yasg',
 
     # custom apps
     'hustlesasa',
