@@ -33,8 +33,15 @@ DATABASE_PORT=5432
 ```bash
 python manage.py makemigrations
 python manage.py migrate
+```
+
+### Step 5: running unit tests and the dev server
+```bash
+export DJANGO_SETTINGS_MODULE=root.settings
+pytest
 python manage.py runserver
 ```
+
 
 API Usage Documentation
 The API provides detailed documentation for usage and testing. Access it via the following URLs when the server is running:
