@@ -1,6 +1,6 @@
 from django.urls import path
-from engine.views import RecommendationViewSet
+from engine.views import RecommendationView
 
 urlpatterns = [
-    path('recommendations/', RecommendationViewSet.as_view(), name='event-recommendations'),
+    path('user/recommendations/', RecommendationView.as_view(), name='event-recommendations'),
 ]

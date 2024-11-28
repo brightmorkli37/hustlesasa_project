@@ -1,1 +1,1 @@
-from .recommendation_viewset import Re
+from .recommendation_view import RecommendationView

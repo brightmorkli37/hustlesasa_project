@@ -1,70 +1,115 @@
-from django.db.models import Count
-from hustlesasa.models import EventTicket, TicketPurchase
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from django.db.models import Q
+from django.contrib.auth.models import User
+from hustlesasa.models import EventTicket, TicketPurchase, EventCategory
 
 
 class ContentBasedRecommender:
     @classmethod
-    def get_user_category_preferences(cls, user):
+    def prepare_ticket_features(cls):
         """
-        Calculate user's category preferences based on their ticket purchases
-        
-        Args:
-            user (User): The user to analyze
+        Prepare feature matrix for all event tickets
         
         Returns:
-            dict: A dictionary of category preferences with their weights
+            tuple: (feature_matrix, ticket_ids, vectorizer)
         """
-        # Get all ticket purchases for the user
-        purchases = TicketPurchase.objects.filter(user=user)
+        # Fetch all tickets
+        tickets = EventTicket.objects.all()
         
-        # Calculate category preferences
-        category_weights = {}
-        total_tickets = purchases.count()
+        # Prepare feature text
+        def prepare_feature_text(ticket):
+            # Combine relevant fields into a single text feature
+            categories = ' '.join(ticket.category.values_list('name', flat=True))
+            return f"{ticket.name} {ticket.description} {categories} {ticket.event_type} {ticket.venue} {str(ticket.price)}"
         
-        for purchase in purchases:
-            ticket = purchase.ticket
-            for category in ticket.category.all():
-                category_weights[category.name] = category_weights.get(category.name, 0) + 1
+        # Prepare features
+        feature_texts = [prepare_feature_text(ticket) for ticket in tickets]
         
-        # Normalize weights
-        normalized_weights = {
-            category: count / total_tickets 
-            for category, count in category_weights.items()
-        }
+        # Create TF-IDF Vectorizer
+        vectorizer = TfidfVectorizer(stop_words='english')
+        feature_matrix = vectorizer.fit_transform(feature_texts)
         
-        return normalized_weights
+        # Store ticket IDs for reference
+        ticket_ids = list(tickets.values_list('id', flat=True))
+        
+        return feature_matrix, ticket_ids, vectorizer
 
     @classmethod
-    def recommend_tickets(cls, user, limit=5):
+    def get_user_ticket_profile(cls, user_id):
         """
-        Recommend event tickets based on user's past purchases
+        Create a profile of tickets purchased by the user
         
         Args:
-            user (User): The user to recommend tickets for
+            user_id (UUID): The user ID to profile
+        
+        Returns:
+            numpy.ndarray or None: User's ticket profile
+        """
+        # Get user's purchased tickets
+        purchased_tickets = TicketPurchase.objects.filter(user_id=user_id).values_list('ticket_id', flat=True)
+        
+        if not purchased_tickets:
+            return None
+        
+        # Prepare feature matrix
+        feature_matrix, ticket_ids, vectorizer = cls.prepare_ticket_features()
+        
+        # Find indices of purchased tickets
+        purchased_indices = [ticket_ids.index(ticket_id) for ticket_id in purchased_tickets]
+        
+        # Compute user profile as average of purchased ticket features
+        # Convert to dense numpy array and compute mean
+        user_profile = np.asarray(feature_matrix[purchased_indices].mean(axis=0)).flatten()
+        
+        return user_profile
+
+    @classmethod
+    def recommend_tickets(cls, user_id, limit=5):
+        """
+        Recommend tickets based on user's purchase history
+        
+        Args:
+            user_id (UUID): The user ID to recommend tickets for
             limit (int): Maximum number of recommendations
         
         Returns:
             QuerySet: Recommended event tickets
         """
-        # Get user's category preferences
-        user_preferences = cls.get_user_category_preferences(user)
+        # Prepare feature matrix
+        feature_matrix, ticket_ids, vectorizer = cls.prepare_ticket_features()
         
-        if not user_preferences:
-            # If no purchase history, return popular tickets
-            return EventTicket.objects.annotate(
-                purchase_count=Count('event_tickets')
-            ).order_by('-purchase_count')[:limit]
+        # Get user's ticket profile
+        user_profile = cls.get_user_ticket_profile(user_id)
         
-        # Find tickets with matching categories
-        recommended_tickets = EventTicket.objects.filter(
-            category__name__in=user_preferences.keys()
-        ).exclude(
-            # Exclude tickets user has already purchased
-            id__in=TicketPurchase.objects.filter(user=user).values_list('ticket_id', flat=True)
-        ).annotate(
-            category_match_score=Count('category', filter=models.Q(
-                category__name__in=user_preferences.keys()
-            ))
-        ).order_by('-category_match_score')[:limit]
+        # If no purchase history, return most recent tickets
+        if user_profile is None:
+            return EventTicket.objects.order_by('-created_at')[:limit]
         
-        return recommended_tickets
+        # Ensure user_profile is a 2D array for cosine_similarity
+        user_profile_2d = user_profile.reshape(1, -1)
+        
+        # Convert feature matrix to dense array
+        feature_matrix_dense = feature_matrix.toarray()
+        
+        # Compute similarity between user profile and all tickets
+        similarities = cosine_similarity(user_profile_2d, feature_matrix_dense)[0]
+        
+        # Exclude already purchased tickets
+        purchased_tickets = TicketPurchase.objects.filter(user_id=user_id).values_list('ticket_id', flat=True)
+        
+        # Get top similar ticket indices
+        similar_indices = similarities.argsort()[::-1]
+        
+        # Filter and collect recommendations
+        recommended_ticket_ids = []
+        for idx in similar_indices:
+            ticket_id = ticket_ids[idx]
+            if ticket_id not in purchased_tickets:
+                recommended_ticket_ids.append(ticket_id)
+                if len(recommended_ticket_ids) == limit:
+                    break
+        
+        # Return recommended tickets, preserving order
+        return EventTicket.objects.filter(id__in=recommended_ticket_ids)

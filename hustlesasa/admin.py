@@ -17,7 +17,7 @@ class EventTicketAdmin(ImportExportModelAdmin):
 
 
 class TicketPurchaseAdmin(ImportExportModelAdmin):
-    list_display = ['user', 'ticket', 'quantity', 'created_at']
+    list_display = ['user', 'id', 'ticket', 'quantity', 'created_at']
     list_per_page = 50
 
 
