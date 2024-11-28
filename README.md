@@ -1,7 +1,13 @@
 # HustleSasa Recommendation Engine
 
 ## Overview
-A recommendation system for HustleSasa's e-commerce platform, demonstrating a content-based technique.
+A recommendation system for HustleSasa's e-commerce platform, demonstrating a content-based filtering technique for making recommendations for event tickets.
+
+## Requirements
+- **Python**: This project requires Python to be installed on your system. 
+- Download and install the latest version of Python from [python.org/downloads](https://www.python.org/downloads/)
+- Recommended Python version: 3.10 or higher
+- Ensure Python is added to your system PATH during installation
 
 ## Installation
 
@@ -42,8 +48,7 @@ pytest
 python manage.py runserver
 ```
 
-
-API Usage Documentation
+## API Usage Documentation
 The API provides detailed documentation for usage and testing. Access it via the following URLs when the server is running:
 
 ```bash
