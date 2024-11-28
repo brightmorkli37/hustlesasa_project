@@ -11,6 +11,8 @@ django-import-export = "*"
 drf-yasg = "*"
 scikit-learn = "*"
 numpy = "*"
+pytest = "*"
+pytest-django = "*"
 
 [dev-packages]
 
